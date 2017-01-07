@@ -1,0 +1,94 @@
+---
+  - fail: msg="This role requires the following vars to be defined - openshift_hosted_logging_mux_hostname"
+    when: openshift_hosted_logging_mux_hostname is not defined
+
+  - name: Create temp directory for kubeconfig
+    command: mktemp -d /tmp/openshift-ansible-XXXXXX
+    register: mktemp
+    changed_when: False
+
+  - name: Copy the admin client config(s)
+    command: >
+      cp {{ openshift_master_config_dir }}/admin.kubeconfig {{ mktemp.stdout }}/admin.kubeconfig
+    changed_when: False
+
+  - name: Make sure logging project exists
+    shell: >
+      {{ openshift.common.client_binary }} --config={{ mktemp.stdout }}/admin.kubeconfig \
+      get project logging -o jsonpath='{.metadata.name}' || exit 1
+
+  - name: Create mux cert/key
+    command: >
+      {{ openshift.common.client_binary }} adm ca create-server-cert
+      --signer-cert={{ openshift_master_config_dir }}/ca.crt
+      --signer-key={{ openshift_master_config_dir }}/ca.key
+      --signer-serial={{ openshift_master_config_dir }}/ca.serial.txt
+      --hostnames=mux,{{ openshift_hosted_logging_mux_hostname }}
+      --cert={{ mktemp.stdout }}/mux-cert.crt
+      --key={{ mktemp.stdout }}/mux-key.crt
+    when: openshift_hosted_logging_mux_cert is not defined or
+          openshift_hosted_logging_mux_key is not defined
+
+  - name: Create mux shared key
+    shell: >
+      openssl rand -base64 48 > {{ mktemp.stdout }}/mux-shared-key
+    when: openshift_hosted_logging_mux_shared_key is not defined
+
+  - name: Creating mux secret
+    command: >
+      {{ openshift.common.client_binary }} -n logging --config={{ mktemp.stdout }}/admin.kubeconfig
+      secrets new logging-mux
+      mux-cert={{ openshift_hosted_logging_mux_cert if openshift_hosted_logging_mux_cert | default(none) else mktemp.stdout ~ '/mux-cert.crt' }}
+      mux-key={{ openshift_hosted_logging_mux_key if openshift_hosted_logging_mux_key | default(none) else mktemp.stdout ~ '/mux-key.crt' }}
+      mux-shared-key={{ openshift_hosted_logging_mux_shared_key if openshift_hosted_logging_mux_shared_key | default(none) else mktemp.stdout ~ '/mux-shared-key' }}
+      mux-ca={{ openshift_hosted_logging_mux_ca_cert if openshift_hosted_logging_mux_ca_cert | default(none) else openshift_master_config_dir ~ '/ca.crt' }}
+    register: secret_output
+    failed_when: "secret_output.rc == 1 and 'exists' not in secret_output.stderr"
+
+  - name: Add mux secret to fluentd service account
+    command: >
+      {{ openshift.common.client_binary }} -n logging --config={{ mktemp.stdout }}/admin.kubeconfig
+      secrets add serviceaccount/aggregated-logging-fluentd logging-fluentd logging-mux
+    register: add_secret_output
+    failed_when: "add_secret_output.rc == 1 and 'exists' not in add_secret_output.stderr"
+
+  - name: Copy over config files
+    copy: src={{ item }} dest={{ mktemp.stdout }}/{{ item }}
+    with_items:
+      - fluent.conf
+      - forward.conf
+      - mux.yaml
+
+  - name: Create ConfigMap for mux configuration
+    command: >
+      {{ openshift.common.client_binary}} -n logging --config={{ mktemp.stdout }}/admin.kubeconfig
+      create configmap logging-mux --from-file=fluent.conf={{ mktemp.stdout }}/fluent.conf
+      --from-file=forward.conf={{ mktemp.stdout }}/forward.conf
+    register: mux_configmap_output
+    failed_when: "mux_configmap_output.rc == 1 and 'exists' not in mux_configmap_output.stderr"
+
+  - name: Process the mux template
+    command: >
+      {{ openshift.common.client_binary }} -n logging --config={{ mktemp.stdout }}/admin.kubeconfig
+      new-app -f {{ mktemp.stdout }}/mux.yaml {{ oc_new_app_values }}
+      --param=FORWARD_LISTEN_HOST={{ openshift_hosted_logging_mux_hostname }}
+      --param=FORWARD_LISTEN_PORT={{ openshift_hosted_logging_forward_listen_port }}
+    register: process_mux
+    failed_when: process_mux.rc == 1 and 'already exists' not in process_mux.stderr
+
+  - name: Create the mux service
+    shell: >
+       echo {{ lookup('template', role_path ~ '/templates/service.yaml.j2')
+       | from_yaml | to_json | quote }} | {{ openshift.common.client_binary }}
+       -n logging create -f -
+    register: create_mux_service
+    failed_when: create_mux_service.rc == 1 and 'already exists' not in create_mux_service.stderr
+
+  - debug:
+      msg: "mux components deployed"
+
+  - name: Delete temp directory
+    file:
+      name: "{{ mktemp.stdout }}"
+      state: absent
+    changed_when: False

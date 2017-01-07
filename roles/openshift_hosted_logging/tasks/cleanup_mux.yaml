@@ -1,0 +1,35 @@
+---
+  - name: Create temp directory for kubeconfig
+    command: mktemp -d /tmp/openshift-ansible-XXXXXX
+    register: mktemp
+    changed_when: False
+
+  - name: Copy the admin client config(s)
+    command: >
+      cp {{ openshift_master_config_dir }}/admin.kubeconfig {{ mktemp.stdout }}/admin.kubeconfig
+    changed_when: False
+
+  - name: Make sure logging project exists
+    shell: >
+      {{ openshift.common.client_binary }} --config={{ mktemp.stdout }}/admin.kubeconfig \
+      get project logging -o jsonpath='{.metadata.name}' || exit 1
+
+  - name: Cleanup mux objects
+    command: >
+      {{ openshift.common.client_binary }} --config={{ mktemp.stdout }}/admin.kubeconfig \
+      delete -n logging --ignore-not-found=true {{ item }} logging-mux
+    with_items:
+      - route
+      - service
+      - dc
+      - secret
+      - configmap
+    ignore_errors: yes
+
+  - name: Delete temp directory
+    file:
+      name: "{{ mktemp.stdout }}"
+      state: absent
+    changed_when: False
+
+  - debug: msg="Success!"

@@ -3,6 +3,14 @@
   include: "{{ role_path }}/tasks/cleanup_logging.yaml"
   when: openshift_hosted_logging_cleanup | default(false) | bool
 
+- name: Cleanup mux deployment
+  include: "{{ role_path }}/tasks/cleanup_mux.yaml"
+  when: openshift_hosted_logging_cleanup_mux | default(false) | bool
+
 - name: Deploy logging
   include: "{{ role_path }}/tasks/deploy_logging.yaml"
   when: not openshift_hosted_logging_cleanup | default(false) | bool
+
+- name: Deploy mux
+  include: "{{ role_path }}/tasks/deploy_mux.yaml"
+  when: openshift_hosted_logging_deploy_mux | default(false) | bool

@@ -1,0 +1,277 @@
+apiVersion: v1
+kind: Template
+labels:
+  component: mux
+  logging-infra: mux
+  provider: openshift
+metadata:
+  annotations:
+    description: Template for logging mux deployment.
+    tags: infrastructure
+  labels:
+    app: logging-mux-template-maker
+    logging-infra: mux
+  name: logging-mux-template
+  namespace: logging
+objects:
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      component: mux
+      provider: openshift
+    name: logging-mux
+  spec:
+    replicas: 1
+    selector:
+      component: mux
+      provider: openshift
+    strategy:
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          component: mux
+          provider: openshift
+        name: mux
+      spec:
+        containers:
+        - env:
+          - name: FORWARD_LISTEN_HOST
+            value: ${FORWARD_LISTEN_HOST}
+          - name: FORWARD_LISTEN_PORT
+            value: ${FORWARD_LISTEN_PORT}
+          - name: K8S_HOST_URL
+            value: https://kubernetes.default.svc.cluster.local
+          - name: ES_HOST
+            value: logging-es
+          - name: ES_PORT
+            value: "9200"
+          - name: ES_CLIENT_CERT
+            value: /etc/fluent/keys/cert
+          - name: ES_CLIENT_KEY
+            value: /etc/fluent/keys/key
+          - name: ES_CA
+            value: /etc/fluent/keys/ca
+          - name: OPS_HOST
+            value: logging-es-ops
+          - name: OPS_PORT
+            value: "9200"
+          - name: OPS_CLIENT_CERT
+            value: /etc/fluent/keys/cert
+          - name: OPS_CLIENT_KEY
+            value: /etc/fluent/keys/key
+          - name: OPS_CA
+            value: /etc/fluent/keys/ca
+          - name: ES_COPY
+            value: "false"
+          - name: ES_COPY_HOST
+            value: ""
+          - name: ES_COPY_PORT
+            value: ""
+          - name: ES_COPY_SCHEME
+            value: https
+          - name: ES_COPY_CLIENT_CERT
+            value: ""
+          - name: ES_COPY_CLIENT_KEY
+            value: ""
+          - name: ES_COPY_CA
+            value: ""
+          - name: ES_COPY_USERNAME
+            value: ""
+          - name: ES_COPY_PASSWORD
+            value: ""
+          - name: OPS_COPY_HOST
+            value: ""
+          - name: OPS_COPY_PORT
+            value: ""
+          - name: OPS_COPY_SCHEME
+            value: https
+          - name: OPS_COPY_CLIENT_CERT
+            value: ""
+          - name: OPS_COPY_CLIENT_KEY
+            value: ""
+          - name: OPS_COPY_CA
+            value: ""
+          - name: OPS_COPY_USERNAME
+            value: ""
+          - name: OPS_COPY_PASSWORD
+            value: ""
+          - name: USE_JOURNAL
+            value: "true"
+          - name: JOURNAL_SOURCE
+            value: ""
+          - name: JOURNAL_READ_FROM_HEAD
+            value: "false"
+          image: ${IMAGE_PREFIX}logging-fluentd:${IMAGE_VERSION}
+          imagePullPolicy: Always
+          ports:
+          - containerPort: ${FORWARD_LISTEN_PORT}
+            name: mux-forward
+          volumeMounts:
+          - mountPath: /etc/fluent/configs.d/user
+            name: config
+            readOnly: true
+          - mountPath: /etc/fluent/keys
+            name: certs
+            readOnly: true
+          - name: muxcerts
+            mountPath: /etc/fluent/muxkeys
+            readOnly: true
+          name: mux
+          resources:
+            limits:
+              cpu: 100m
+              memory: 512Mi
+        nodeSelector:
+          logging-infra-fluentd: "true"
+        serviceAccountName: aggregated-logging-fluentd
+        terminationGracePeriodSeconds: 300
+        volumes:
+        - configMap:
+            name: logging-mux
+          name: config
+        - name: certs
+          secret:
+            secretName: logging-fluentd
+        - name: muxcerts
+          secret:
+            secretName: logging-mux
+    updateStrategy:
+      rollingUpdate:
+        minReadySeconds: 600
+      type: RollingUpdate
+parameters:
+-
+  description: "Internal url for reaching the master API to query pod labels"
+  name: MASTER_URL
+  value: "https://kubernetes.default.svc.cluster.local"
+-
+  description: "Hostname (or IP) for reaching ElasticSearch to write logs"
+  name: ES_HOST
+  value: "logging-es"
+-
+  description: "Port number for reaching ElasticSearch to write logs"
+  name: ES_PORT
+  value: "9200"
+-
+  description: "Location of client certificate for authenticating to ElasticSearch to write logs"
+  name: ES_CLIENT_CERT
+  value: "/etc/fluent/keys/cert"
+-
+  description: "Location of client key for authenticating to ElasticSearch to write logs"
+  name: ES_CLIENT_KEY
+  value: "/etc/fluent/keys/key"
+-
+  description: "Location of CA cert for validating connection to ElasticSearch to write logs"
+  name: ES_CA
+  value: "/etc/fluent/keys/ca"
+-
+  description: "Hostname (or IP) for reaching ElasticSearch to write cluster logs"
+  name: OPS_HOST
+  value: "logging-es"
+-
+  description: "Port number for reaching ElasticSearch to write cluster logs"
+  name: OPS_PORT
+  value: "9200"
+-
+  description: "Location of client certificate for authenticating to ElasticSearch to write cluster logs"
+  name: OPS_CLIENT_CERT
+  value: "/etc/fluent/keys/cert"
+-
+  description: "Location of client key for authenticating to ElasticSearch to write cluster logs"
+  name: OPS_CLIENT_KEY
+  value: "/etc/fluent/keys/key"
+-
+  description: "Location of CA cert for validating connection to ElasticSearch to write cluster logs"
+  name: OPS_CA
+  value: "/etc/fluent/keys/ca"
+-
+  description: "Send a copy of the logs to an additional Elasticsearch instance."
+  name: ES_COPY
+  value: "false"
+-
+  description: "Hostname (or IP) for additional ElasticSearch"
+  name: ES_COPY_HOST
+  value: ""
+-
+  description: "Port number for additional ElasticSearch"
+  name: ES_COPY_PORT
+  value: ""
+-
+  description: "URL scheme for additional ElasticSearch - http or https - default is https"
+  name: ES_COPY_SCHEME
+  value: "https"
+-
+  description: "Location of client certificate for authenticating to additional ElasticSearch"
+  name: ES_COPY_CLIENT_CERT
+  value: ""
+-
+  description: "Location of client key for authenticating to additional ElasticSearch"
+  name: ES_COPY_CLIENT_KEY
+  value: ""
+-
+  description: "Location of CA cert for validating connection to additional ElasticSearch"
+  name: ES_COPY_CA
+  value: ""
+-
+  description: "Username for username/password auth to connection to additional ElasticSearch"
+  name: ES_COPY_USERNAME
+  value: ""
+-
+  description: "Password for username/password auth to connection to additional ElasticSearch"
+  name: ES_COPY_PASSWORD
+  value: ""
+-
+  description: "Hostname (or IP) for additional ElasticSearch to write cluster logs"
+  name: OPS_COPY_HOST
+  value: ""
+-
+  description: "Port number for additional ElasticSearch to write cluster logs"
+  name: OPS_COPY_PORT
+  value: ""
+-
+  description: "URL scheme for additional ElasticSearch to write cluster logs - http or https - default is https"
+  name: OPS_COPY_SCHEME
+  value: "https"
+-
+  description: "Location of client certificate for authenticating to additional ElasticSearch to write cluster logs"
+  name: OPS_COPY_CLIENT_CERT
+  value: ""
+-
+  description: "Location of client key for authenticating to additional ElasticSearch to write cluster logs"
+  name: OPS_COPY_CLIENT_KEY
+  value: ""
+-
+  description: "Location of CA cert for validating connectiong to additional ElasticSearch to write cluster logs"
+  name: OPS_COPY_CA
+  value: ""
+-
+  description: "Username for username/password auth to connection to additional ElasticSearch to write cluster logs"
+  name: OPS_COPY_USERNAME
+  value: ""
+-
+  description: "Password for username/password auth to connection to additional ElasticSearch to write cluster logs"
+  name: OPS_COPY_PASSWORD
+  value: ""
+-
+  description: "The prefix of the image to use."
+  name: IMAGE_PREFIX
+  value: "openshift/origin-"
+-
+  description: "The version tag of the image to use."
+  name: IMAGE_VERSION
+  value: latest
+-
+  description: 'The external hostname used to connect to the forward listener.'
+  name: FORWARD_LISTEN_HOST
+  value: "mux.example.com"
+-
+  description: 'The default port the forward listener uses for incoming connections (targetPort: mux-forward).'
+  name: FORWARD_LISTEN_PORT
+  value: "24284"

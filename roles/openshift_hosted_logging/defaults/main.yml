@@ -1,2 +1,3 @@
 ---
 hosted_base: "{{ openshift.common.config_base if openshift.common.is_containerized | bool else '/usr/share/openshift' }}/hosted"
+openshift_hosted_logging_forward_listen_port: 24284
