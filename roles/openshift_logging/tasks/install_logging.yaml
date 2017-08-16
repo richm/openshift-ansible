@@ -63,6 +63,9 @@
 - set_fact:
     elasticsearch_storage_type: "{{ openshift_logging_elasticsearch_storage_type | default('pvc' if ( openshift_logging_es_pvc_dynamic | bool or openshift_hosted_logging_storage_kind | default('') == 'nfs' or openshift_logging_es_pvc_size | length > 0)  else 'emptydir') }}"
 
+- debug:
+    msg: storage {{ openshift_logging_elasticsearch_storage_type | default('none') }} and {{ openshift_hosted_logging_storage_kind | default('none') }} and {{ elasticsearch_storage_type | default('none') }}
+
 # We don't allow scaling down of ES nodes currently
 - include_role:
     name: openshift_logging_elasticsearch
