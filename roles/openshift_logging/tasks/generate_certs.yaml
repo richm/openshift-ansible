@@ -133,7 +133,9 @@
     - not ca_crl_srl_file.stat.exists
 
 - name: Generate PEM certs
-  include_tasks: generate_pems.yaml component={{node_name}}
+  include_tasks: generate_pems.yaml
+  vars:
+    component: {{node_name}}
   with_items:
     - system.logging.fluentd
     - system.logging.kibana
