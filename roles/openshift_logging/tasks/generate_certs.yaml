@@ -135,7 +135,7 @@
 - name: Generate PEM certs
   include_tasks: generate_pems.yaml
   vars:
-    component: {{node_name}}
+    component: "{{node_name}}"
   with_items:
     - system.logging.fluentd
     - system.logging.kibana
