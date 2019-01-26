@@ -250,6 +250,8 @@
     openshift_logging_kibana_es_host: "{{ openshift_logging_es_host }}"
     openshift_logging_kibana_es_port: "{{ openshift_logging_es_port }}"
 
+- debug:
+    msg: Kibana hostname 1 "{{ openshift_logging_kibana_hostname }}"
 
 - include_role:
     name: openshift_logging_kibana
@@ -276,6 +278,9 @@
     openshift_logging_kibana_ca: "{{ openshift_logging_kibana_ops_ca}}"
   when:
   - openshift_logging_use_ops | bool
+
+- debug:
+    msg: Kibana hostname 2 "{{ openshift_logging_kibana_hostname }}"
 
 - include_tasks: annotate_ops_projects.yaml
 
