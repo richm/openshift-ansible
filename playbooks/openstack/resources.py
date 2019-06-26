@@ -22,8 +22,10 @@ import shade
 
 def server_name(server):
     '''Return the name to use as the nodename for ansible'''
-    return server.private_v4
-
+    for key in ['private_v4', 'public_v4', 'accessIPv4', 'interface_ip']:
+        if key in server and len(server.get(key, '')) > 0:
+            return server[key]
+    raise KeyError("No suitable field found for server_name")
 
 def base_openshift_inventory(cluster_hosts):
     '''Set the base openshift inventory.'''
