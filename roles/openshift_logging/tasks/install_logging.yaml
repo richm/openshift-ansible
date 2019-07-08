@@ -250,7 +250,7 @@
     openshift_logging_kibana_es_host: "{{ openshift_logging_es_host }}"
     openshift_logging_kibana_es_port: "{{ openshift_logging_es_port }}"
 
-- import_role:
+- include_role:
     name: openshift_logging_kibana
   vars:
     generated_certs_dir: "{{openshift.common.config_base}}/logging"
